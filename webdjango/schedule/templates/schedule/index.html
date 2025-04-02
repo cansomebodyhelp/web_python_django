@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <!-- Основні налаштування сторінки -->
+    <meta charset="UTF-8">  <!-- Кодування UTF-8 для підтримки українських символів -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">  <!-- Адаптивний дизайн -->
+    <title>Розклад руху поїздів</title>  <!-- Заголовок сторінки -->
+
+    <!-- Підключення jQuery для спрощення роботи з DOM і AJAX -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <script>
+        /* Функція для перемикання видимості адмін-панелі */
+        function toggleAdminMode() {
+            const adminSection = $('#admin-section');
+            adminSection.toggle();  // Перемикає display між none/block
+        }
+
+        /* Функція для видалення запису розкладу */
+        function deleteRecord(recordId) {
+            if (!recordId) {
+                alert('Невірний ідентифікатор запису');
+                return;
+            }
+
+            // Підтвердження видалення
+            const confirmation = confirm("Ви впевнені, що хочете видалити цей запис?");
+            if (confirmation) {
+                $.ajax({
+                    url: `/records/${recordId}/`,  // URL для видалення
+                    method: 'DELETE',  // Використання HTTP-методу DELETE
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken'),  // CSRF-захист
+                    },
+                    success: function() {
+                        alert('Запис видалено');
+                        $(`#record-${recordId}`).remove();  // Видалення рядка з таблиці
+                    },
+                    error: function() {
+                        alert('Помилка при видаленні запису');
+                    }
+                });
+            }
+        }
+
+        /* Функція для отримання значення cookie */
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    // Пошук потрібного cookie
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        /* Обробка подій після завантаження DOM */
+        $(document).ready(function() {
+            // Обробник форми для додавання поїзда
+            $('#trainForm').submit(function(e) {
+                e.preventDefault();  // Заборона стандартної відправки форми
+                $.ajax({
+                    url: '/trains/',  // URL для створення поїзда
+                    method: 'POST',
+                    data: $(this).serialize(),  // Серіалізація даних форми
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken'),  // CSRF-захист
+                    },
+                    success: function() {
+                        alert("Поїзд додано успішно!");
+                        $('#trainForm')[0].reset();  // Очищення форми
+                        window.location.reload();  // Перезавантаження сторінки
+                    },
+                    error: function() {
+                        alert("Помилка при додаванні поїзда");
+                    }
+                });
+            });
+
+            // Аналогічні обробники для станцій та записів розкладу
+            $('#stationForm').submit(function(e) {
+                e.preventDefault();
+                $.ajax({
+                    url: '/stations/',
+                    method: 'POST',
+                    data: $(this).serialize(),
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken'),
+                    },
+                    success: function() {
+                        alert("Станцію додано успішно!");
+                        $('#stationForm')[0].reset();
+                        window.location.reload();
+                    },
+                    error: function() {
+                        alert("Помилка при додаванні станції");
+                    }
+                });
+            });
+
+            $('#recordForm').submit(function(e) {
+                e.preventDefault();
+                $.ajax({
+                    url: '/records/',
+                    method: 'POST',
+                    data: $(this).serialize(),
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken'),
+                    },
+                    success: function() {
+                        alert("Запис розкладу додано успішно!");
+                        $('#recordForm')[0].reset();
+                        window.location.reload();
+                    },
+                    error: function() {
+                        alert("Помилка при додаванні запису");
+                    }
+                });
+            });
+        });
+    </script>
+</head>
+<body>
+    <!-- Головний заголовок сторінки -->
+    <h1>Розклад руху поїздів</h1>
+
+    <!-- Кнопка для перемикання адмін-режиму -->
+    <button onclick="toggleAdminMode()">Увімкнути/вимкнути режим адміністратора</button>
+
+    <!-- Адмін-панель (прихована за замовчуванням) -->
+    <div id="admin-section" style="display: none; margin-top: 20px;">
+        <!-- Форма для додавання поїзда -->
+        <h2>Додати поїзд</h2>
+        <form id="trainForm">
+            {% csrf_token %}  <!-- Захист від CSRF -->
+            <label>Назва поїзда: <input type="text" name="name" required></label><br>
+            <label>Тип поїзда: <input type="text" name="train_type" required></label><br>
+            <button type="submit">Додати</button>
+        </form>
+
+        <!-- Форма для додавання станції -->
+        <h2>Додати станцію</h2>
+        <form id="stationForm">
+            {% csrf_token %}
+            <label>Назва станції: <input type="text" name="name" required></label><br>
+            <label>Платформа: <input type="text" name="platform" required></label><br>
+            <button type="submit">Додати</button>
+        </form>
+
+        <!-- Форма для додавання запису розкладу -->
+        <h2>Додати запис розкладу</h2>
+        <form id="recordForm">
+            {% csrf_token %}
+            <!-- Випадаючий список поїздів (дані з бекенду) -->
+            <label>Поїзд:
+                <select name="train_id" required>
+                    {% for train in trains %}
+                    <option value="{{ train.id }}">{{ train.name }}</option>
+                    {% endfor %}
+                </select>
+            </label><br>
+
+            <!-- Випадаючі списки станцій -->
+            <label>Станція відправлення:
+                <select name="departure_station_id" required>
+                    {% for station in stations %}
+                    <option value="{{ station.id }}">{{ station.name }}</option>
+                    {% endfor %}
+                </select>
+            </label><br>
+
+            <label>Станція прибуття:
+                <select name="arrival_station_id" required>
+                    {% for station in stations %}
+                    <option value="{{ station.id }}">{{ station.name }}</option>
+                    {% endfor %}
+                </select>
+            </label><br>
+
+            <!-- Поля для часу -->
+            <label>Час відправлення (HH:MM): <input type="text" name="departure_time" required></label><br>
+            <label>Час прибуття (HH:MM): <input type="text" name="arrival_time" required></label><br>
+            <button type="submit">Додати</button>
+        </form>
+    </div>
+
+    <!-- Таблиця з розкладом -->
+    <h2>Таблиця розкладу</h2>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>Поїзд</th>
+                <th>Станція відправлення</th>
+                <th>Станція прибуття</th>
+                <th>Час відправлення</th>
+                <th>Час прибуття</th>
+                <th>Дії</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Цикл для виводу всіх записів розкладу -->
+            {% for record in records %}
+            <tr id="record-{{ record.id }}">
+                <td>{{ record.train_name }}</td>
+                <td>{{ record.departure_station_name }}</td>
+                <td>{{ record.arrival_station_name }}</td>
+                <td>{{ record.departure_time }}</td>
+                <td>{{ record.arrival_time }}</td>
+                <td>
+                    <!-- Кнопка видалення з обробником подій -->
+                    <button onclick="deleteRecord('{{ record.id }}')">Видалити</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>
